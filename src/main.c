@@ -9,30 +9,35 @@
 
 #define WHO_AM_I 0
 
+#define SPI_NODE DT_NODELABEL(imuspi)
+
 #define SPI_CONFIG \
-    (SPI_WORD_SET(8) | SPI_TRANSFER_MSB | SPI_MODE_CPOL | SPI_MODE_CPHA | SPI_OP_MODE_MASTER)
+    (SPI_WORD_SET(8) | SPI_TRANSFER_MSB | SPI_OP_MODE_MASTER)
 
 K_MSGQ_DEFINE(accel_data, sizeof(uint16_t), 1, 1);
 
 const struct gpio_dt_spec output = GPIO_DT_SPEC_GET(DT_NODELABEL(out), gpios);
 const struct gpio_dt_spec pwr = GPIO_DT_SPEC_GET(DT_NODELABEL(imupwr), gpios);
-const struct gpio_dt_spec cs = GPIO_DT_SPEC_GET(DT_NODELABEL(cs), gpios);
-const struct spi_dt_spec spi_dev = SPI_DT_SPEC_GET(DT_NODELABEL(accel), SPI_CONFIG, 0);
-//#define ICM20648_NODE DT_NODELABEL(accel)   /* from devicetree label */
-//static const struct device *spi_dev = DEVICE_DT_GET(ICM20648_NODE);
 
-struct spi_config cfg = {
+/* Get the SPI Device */
+const struct device* spi_dev = DEVICE_DT_GET(SPI_NODE);
+
+struct spi_cs_control cs_ctrl = (struct spi_cs_control) {
+		.gpio = GPIO_DT_SPEC_GET(SPI_NODE, cs_gpios),
+		.delay = 0u,
+};
+
+struct spi_config cfg = (struct spi_config) {
     .frequency = 10000,
     .operation = SPI_CONFIG,
     .slave = 0,
-    .cs = NULL 
+    .cs = &cs_ctrl 
 };
+
 
 int inv_spi_single_write(uint8_t reg, uint8_t *data)
 {
 	int result;
-
-    gpio_pin_set_dt(&cs, 0);
 
 	const struct spi_buf buf[2] = {
 		{
@@ -57,9 +62,7 @@ int inv_spi_single_write(uint8_t reg, uint8_t *data)
 //        .count = 2
 //    };
 
-    result = spi_transceive(spi_dev.bus, &cfg, &tx, NULL);
-
-    gpio_pin_set_dt(&cs, 1);
+    result = spi_transceive(spi_dev, &cfg, &tx, NULL);
 
 	if (result) {
 		return result;
@@ -71,8 +74,6 @@ int inv_spi_single_write(uint8_t reg, uint8_t *data)
 int inv_spi_read(uint8_t reg, uint8_t *data, size_t len)
 {
 	int result;
-
-    gpio_pin_set_dt(&cs, 0);
 
 	unsigned char tx_buffer[2] = { 0, };
 
@@ -103,13 +104,14 @@ int inv_spi_read(uint8_t reg, uint8_t *data, size_t len)
 		.count = 2,
 	};
 
-	result = spi_transceive(spi_dev.bus, &cfg, &tx, &rx);
+    printk("About to read ts\r\n");
+	result = spi_transceive(spi_dev, &cfg, &tx, &rx);
+    printk("Read ts\r\n");
 
 	if (result) {
 		return result;
 	}
 
-    gpio_pin_set_dt(&cs, 1);
 	return 0;
 }
 
@@ -164,8 +166,8 @@ void sensor_thread()
     gpio_pin_set_dt(&pwr, 1);
 
     /* Check the device is ready */
-    if (!spi_is_ready_dt(&spi_dev)) {
-        printk("Dead IMU!\r\n");
+    if (!device_is_ready(spi_dev)) {
+        printk("Dead SPI!\r\n");
         k_panic();
     }
 

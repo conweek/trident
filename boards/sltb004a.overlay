@@ -1,3 +1,15 @@
+&gpioc {
+    status = "okay";
+};
+
+&gpioa {
+    status = "okay";
+};
+
+&gpiof {
+    status = "okay";
+};
+
 / {
 
     accel-stuff {
@@ -12,33 +24,20 @@
             gpios = <&gpioa 8 GPIO_ACTIVE_HIGH>;
         };
 
-        cs: cs {
-            gpios = <&gpioc 3 GPIO_ACTIVE_HIGH>;
-        };
+    };
+
+    imuspi: imuspi {
+        compatible = "zephyr,spi-bitbang";
+        status = "okay";
+
+        #address-cells = <1>;
+        #size-cells = <0>;
+
+        clk-gpios = <&gpioc 2 GPIO_ACTIVE_HIGH>;
+        miso-gpios = <&gpioc 1 GPIO_ACTIVE_HIGH>;
+        mosi-gpios = <&gpioc 0 GPIO_ACTIVE_HIGH>;
+        cs-gpios = <&gpioc 3 GPIO_ACTIVE_LOW>;
     };
 };
 
-&usart3 {
-	compatible = "silabs,usart-spi";
-	status = "okay";
 
-    clock-frequency = <32000>;
-
-	#address-cells = <1>;
-	#size-cells = <0>;
-
-	location-clk = <GECKO_LOCATION(18) GECKO_PORT_C GECKO_PIN(2)>;
-	location-rx = <GECKO_LOCATION(18) GECKO_PORT_C GECKO_PIN(1)>;
-	location-tx = <GECKO_LOCATION(18) GECKO_PORT_C GECKO_PIN(0)>;
-
-	accel: accel@0 {
-        compatible = "vnd,spi-device";
-		status = "okay";
-		reg = <0>;
-		spi-max-frequency = <32000>;
-	};
-};
-
-&gpioc {
-    status = "okay";
-};
