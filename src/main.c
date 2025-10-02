@@ -17,10 +17,10 @@ K_MSGQ_DEFINE(accel_data, sizeof(uint16_t), 1, 1);
 const struct gpio_dt_spec output = GPIO_DT_SPEC_GET(DT_NODELABEL(out), gpios);
 const struct gpio_dt_spec pwr = GPIO_DT_SPEC_GET(DT_NODELABEL(imupwr), gpios);
 const struct gpio_dt_spec cs = GPIO_DT_SPEC_GET(DT_NODELABEL(cs), gpios);
-//const struct spi_dt_spec imu = SPI_DT_SPEC_GET(DT_NODELABEL(accel), SPI_CONFIG, 0);
-#define ICM20648_NODE DT_NODELABEL(accel)   /* from devicetree label */
+const struct spi_dt_spec spi_dev = SPI_DT_SPEC_GET(DT_NODELABEL(accel), SPI_CONFIG, 0);
+//#define ICM20648_NODE DT_NODELABEL(accel)   /* from devicetree label */
+//static const struct device *spi_dev = DEVICE_DT_GET(ICM20648_NODE);
 
-static const struct device *spi_dev = DEVICE_DT_GET(ICM20648_NODE);
 struct spi_config cfg = {
     .frequency = 10000,
     .operation = SPI_CONFIG,
@@ -57,7 +57,7 @@ int inv_spi_single_write(uint8_t reg, uint8_t *data)
 //        .count = 2
 //    };
 
-    result = spi_transceive(spi_dev, &cfg, &tx, NULL);
+    result = spi_transceive(spi_dev.bus, &cfg, &tx, NULL);
 
     gpio_pin_set_dt(&cs, 1);
 
@@ -103,7 +103,7 @@ int inv_spi_read(uint8_t reg, uint8_t *data, size_t len)
 		.count = 2,
 	};
 
-	result = spi_transceive(spi_dev, &cfg, &tx, &rx);
+	result = spi_transceive(spi_dev.bus, &cfg, &tx, &rx);
 
 	if (result) {
 		return result;
@@ -132,12 +132,6 @@ void output_thread()
 void init_imu()
 {
 
-    if (!gpio_is_ready_dt(&pwr)) {
-        printk("IMU Power not ready!\r\n");
-        k_panic();
-    }
-
-    gpio_pin_set_dt(&pwr, 1);
 
     printk("Turning on the shit\r\n");
 
@@ -162,8 +156,15 @@ void init_imu()
 void sensor_thread()
 {
 
+    if (!gpio_is_ready_dt(&pwr)) {
+        printk("IMU Power not ready!\r\n");
+        k_panic();
+    }
+
+    gpio_pin_set_dt(&pwr, 1);
+
     /* Check the device is ready */
-    if (!device_is_ready(spi_dev)) {
+    if (!spi_is_ready_dt(&spi_dev)) {
         printk("Dead IMU!\r\n");
         k_panic();
     }
