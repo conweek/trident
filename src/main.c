@@ -22,16 +22,16 @@ const struct gpio_dt_spec pwr = GPIO_DT_SPEC_GET(DT_NODELABEL(imupwr), gpios);
 /* Get the SPI Device */
 const struct device* spi_dev = DEVICE_DT_GET(SPI_NODE);
 
-struct spi_cs_control cs_ctrl = (struct spi_cs_control) {
+const struct spi_cs_control cs_ctrl = {
 		.gpio = GPIO_DT_SPEC_GET(SPI_NODE, cs_gpios),
 		.delay = 0u,
 };
 
-struct spi_config cfg = (struct spi_config) {
-    .frequency = 10000,
+struct spi_config cfg = {
+    .frequency = 32000,
     .operation = SPI_CONFIG,
     .slave = 0,
-    .cs = &cs_ctrl 
+    .cs = cs_ctrl
 };
 
 
@@ -104,9 +104,7 @@ int inv_spi_read(uint8_t reg, uint8_t *data, size_t len)
 		.count = 2,
 	};
 
-    printk("About to read ts\r\n");
 	result = spi_transceive(spi_dev, &cfg, &tx, &rx);
-    printk("Read ts\r\n");
 
 	if (result) {
 		return result;
@@ -124,7 +122,7 @@ void output_thread()
         /* Grab the data out of the message queue */
         if (k_msgq_get(&accel_data, &xVal, K_FOREVER)) {
             gpio_pin_set_dt(&output, 1);
-            k_msleep(50);
+            k_msleep(250);
             gpio_pin_set_dt(&output, 0);
         }
 
@@ -134,24 +132,41 @@ void output_thread()
 void init_imu()
 {
 
-
-    printk("Turning on the shit\r\n");
-
-    k_msleep(10);
-
     int ret = 0;
-    uint8_t value = 0;
+    uint8_t value = 0x80;
 
-    printk("Abt to read!!\r\n");
+    /* Soft reset the device */
+    inv_spi_single_write(0x06, &value);
+
+    k_msleep(50);
+
+    value = 0x10;
+
+    /* Enable SPI not I2C */
+    inv_spi_single_write(0x03, &value);
+
+    k_msleep(50);
     ret = inv_spi_read(WHO_AM_I, &value, 1);
-    __ASSERT(value == 0xE0, "Expected Who-am-i of 0xE0, got 0x%x", value);
-
-    if (ret) {
-        printk("Failed to read SPI\n");
-        k_panic();
-    }
-
     printk("Who-Am-I passed : 0x%x\r\n", value);
+
+    k_msleep(50);
+    
+    value = 0x01;
+
+    /* Enable PLL Clock or interal osc */
+    inv_spi_single_write(0x06, &value);
+
+    k_msleep(50);
+
+    value = (3 << 1);
+
+    //inv_spi_single_write(((2 << 7) | 0x14), &value);
+    //printk("Accel config: 0x%x", value);
+
+    k_msleep(50);
+
+    inv_spi_read(((2 << 7) | 0x14), &value, 1);
+    printk("Accel config: 0x%x", value);
 
 }
 
@@ -172,9 +187,31 @@ void sensor_thread()
     }
 
     init_imu();
-    
+    float accelRes = 2.0f / 32768.0f;  // 2g full scale
+    uint8_t rawData[2];
+    int16_t accel_raw;
+    float accel_m_s2;
+
     while (1) {
-        k_msleep(1);   
+
+        // Read high and low bytes of Y-axis
+        inv_spi_read(0x2F, &rawData[0], 1);  // ACCEL_YOUT_H
+        inv_spi_read(0x30, &rawData[1], 1);  // ACCEL_YOUT_L
+
+        // Combine bytes into signed 16-bit value
+        accel_raw = ((int16_t)rawData[0] << 8) | rawData[1];
+
+        // Convert to g using full-scale resolution
+        accel_m_s2 = (float)accel_raw * accelRes;
+
+        // Convert to m/s²
+        accel_m_s2 *= 9.81f;
+
+        if (accel_m_s2 > 12.f) {
+            k_msgq_purge(&accel_data);
+            k_msgq_put(&accel_data, &accel_m_s2, K_NO_WAIT);
+        }
+        k_msleep(5);   
     }
 
 }

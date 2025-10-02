@@ -2,6 +2,10 @@
     status = "okay";
 };
 
+&gpioi {
+    status = "okay";
+};
+
 &gpioa {
     status = "okay";
 };
@@ -21,7 +25,7 @@
         };
 
         out: out {
-            gpios = <&gpioa 8 GPIO_ACTIVE_HIGH>;
+            gpios = <&gpiod 8 GPIO_ACTIVE_HIGH>;
         };
 
     };
